@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -36,6 +37,8 @@ import (
 
 	fmux "github.com/hashicorp/yamux"
 )
+
+var adminServer *http.Server
 
 // Service is a client service.
 type Service struct {
@@ -127,7 +130,7 @@ func (svr *Service) Run() error {
 			return fmt.Errorf("Load assets error: %v", err)
 		}
 
-		err = svr.RunAdminServer(svr.cfg.AdminAddr, svr.cfg.AdminPort)
+		adminServer, err = svr.RunAdminServer(svr.cfg.AdminAddr, svr.cfg.AdminPort)
 		if err != nil {
 			log.Warn("run admin server error: %v", err)
 		}
@@ -294,6 +297,9 @@ func (svr *Service) ReloadConf(pxyCfgs map[string]config.ProxyConf, visitorCfgs 
 
 func (svr *Service) Close() {
 	atomic.StoreUint32(&svr.exit, 1)
+	if adminServer != nil {
+		_ = adminServer.Close()
+	}
 	svr.ctl.Close()
 	svr.cancel()
 }

@@ -17,6 +17,7 @@ package sub
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"os/signal"
@@ -25,13 +26,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/fatedier/frp/client"
 	"github.com/fatedier/frp/models/auth"
 	"github.com/fatedier/frp/models/config"
 	"github.com/fatedier/frp/utils/log"
 	"github.com/fatedier/frp/utils/version"
+	"github.com/fatedier/golib/crypto"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -72,10 +73,12 @@ var (
 	bindPort          int
 
 	kcpDoneCh chan struct{}
+
+	svr *client.Service
 )
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "./frpc.ini", "config file of frpc")
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "./conf/frpc.ini", "config file of frpc")
 	rootCmd.PersistentFlags().BoolVarP(&showVersion, "version", "v", false, "version of frpc")
 
 	kcpDoneCh = make(chan struct{})
@@ -100,10 +103,34 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		os.Exit(1)
+func Start() (err error) {
+	if !isClientStarted() {
+		crypto.DefaultSalt = "frp"
+		rand.Seed(time.Now().UnixNano())
+		go func() {
+			if err = rootCmd.Execute(); err != nil {
+				os.Exit(1)
+			}
+		}()
 	}
+	return
+}
+
+func Stop() {
+	if isClientStarted() {
+		svr.Close()
+		svr = nil
+	}
+}
+
+func Restart() (err error) {
+	Stop()
+	err = Start()
+	return
+}
+
+func isClientStarted() bool {
+	return svr != nil
 }
 
 func handleSignal(svr *client.Service) {
@@ -214,9 +241,9 @@ func startService(cfg config.ClientCommonConf, pxyCfgs map[string]config.ProxyCo
 			},
 		}
 	}
-	svr, errRet := client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
-	if errRet != nil {
-		err = errRet
+
+	svr, err = client.NewService(cfg, pxyCfgs, visitorCfgs, cfgFile)
+	if err != nil {
 		return
 	}
 

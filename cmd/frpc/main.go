@@ -15,18 +15,117 @@
 package main
 
 import (
-	"math/rand"
+	"fmt"
+	"net"
+	"net/http"
 	"time"
 
-	_ "github.com/fatedier/frp/assets/frpc/statik"
 	"github.com/fatedier/frp/cmd/frpc/sub"
-
-	"github.com/fatedier/golib/crypto"
+	"github.com/fatedier/frp/utils/log"
+	"github.com/gorilla/mux"
 )
 
-func main() {
-	crypto.DefaultSalt = "frp"
-	rand.Seed(time.Now().UnixNano())
+const (
+	httpReadTimeout  = 10 * time.Second
+	httpWriteTimeout = 10 * time.Second
+	addr             = "127.0.0.1"
+	port             = 7300
+)
 
-	sub.Execute()
+type GeneralResponse struct {
+	Code int
+	Msg  string
+}
+
+func main() {
+	_ = runLifecycleServer()
+}
+
+func runLifecycleServer() (err error) {
+	// url router
+	router := mux.NewRouter()
+
+	// api
+	router.HandleFunc("/api/start", apiStart).Methods("GET")
+	router.HandleFunc("/api/restart", apiRestart).Methods("GET")
+	router.HandleFunc("/api/stop", apiStop).Methods("GET")
+
+	address := fmt.Sprintf("%s:%d", addr, port)
+	server := &http.Server{
+		Addr:         address,
+		Handler:      router,
+		ReadTimeout:  httpReadTimeout,
+		WriteTimeout: httpWriteTimeout,
+	}
+	if address == "" {
+		address = ":http"
+	}
+	ln, err := net.Listen("tcp", address)
+	if err != nil {
+		return err
+	}
+	server.Serve(ln)
+	return
+}
+
+// GET api/start
+func apiStart(w http.ResponseWriter, r *http.Request) {
+	resp := GeneralResponse{Code: 200}
+
+	log.Info("Http request [/api/start]")
+	defer func() {
+		log.Info("Http response [/api/start], code [%d]", resp.Code)
+		w.WriteHeader(resp.Code)
+		if len(resp.Msg) > 0 {
+			w.Write([]byte(resp.Msg))
+		}
+	}()
+
+	err := sub.Start()
+	if err != nil {
+		resp.Code = 500
+		resp.Msg = err.Error()
+	} else {
+		resp.Msg = "OK"
+	}
+
+}
+
+// GET api/restart
+func apiRestart(w http.ResponseWriter, r *http.Request) {
+	resp := GeneralResponse{Code: 200}
+
+	log.Info("Http request [/api/restart]")
+	defer func() {
+		log.Info("Http response [/api/restart], code [%d]", resp.Code)
+		w.WriteHeader(resp.Code)
+		if len(resp.Msg) > 0 {
+			w.Write([]byte(resp.Msg))
+		}
+	}()
+
+	err := sub.Restart()
+
+	if err != nil {
+		resp.Code = 500
+		resp.Msg = err.Error()
+	} else {
+		resp.Msg = "OK"
+	}
+}
+
+// GET api/stop
+func apiStop(w http.ResponseWriter, r *http.Request) {
+	resp := GeneralResponse{Code: 200}
+
+	log.Info("Http request [/api/stop]")
+	defer func() {
+		log.Info("Http response [/api/stop], code [%d]", resp.Code)
+		w.WriteHeader(resp.Code)
+		if len(resp.Msg) > 0 {
+			w.Write([]byte(resp.Msg))
+		}
+	}()
+
+	sub.Stop()
 }

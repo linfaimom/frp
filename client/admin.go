@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/fatedier/frp/assets"
+	_ "github.com/fatedier/frp/assets/frpc/statik"
 	frpNet "github.com/fatedier/frp/utils/net"
 
 	"github.com/gorilla/mux"
@@ -31,7 +32,7 @@ var (
 	httpServerWriteTimeout = 10 * time.Second
 )
 
-func (svr *Service) RunAdminServer(addr string, port int) (err error) {
+func (svr *Service) RunAdminServer(addr string, port int) (server *http.Server, err error) {
 	// url router
 	router := mux.NewRouter()
 
@@ -52,7 +53,7 @@ func (svr *Service) RunAdminServer(addr string, port int) (err error) {
 	})
 
 	address := fmt.Sprintf("%s:%d", addr, port)
-	server := &http.Server{
+	server = &http.Server{
 		Addr:         address,
 		Handler:      router,
 		ReadTimeout:  httpServerReadTimeout,
@@ -63,7 +64,7 @@ func (svr *Service) RunAdminServer(addr string, port int) (err error) {
 	}
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	go server.Serve(ln)
